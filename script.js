@@ -1,111 +1,150 @@
-window.onload = function () {
-  const canvas = document.getElementById('gameCanvas');
-  const ctx = canvas.getContext('2d');
+let score = 0;
+let timer = 60;
+let interval, spawnInterval;
+let isPaused = false;
+let gameStarted = false;
+let currentPlayer = 1;
+let playerScores = [0, 0];
 
-  let score = 0;
-  let timeLeft = 60;
-  let gameRunning = false;
-  let objects = [];
-  let interval;
-  let gameLoop;
+const scoreDisplay = document.getElementById("score");
+const timeLeftDisplay = document.getElementById("time-left");
+const currentPlayerDisplay = document.getElementById("current-player");
+const gameArea = document.getElementById("game-area");
+const soundToggle = document.getElementById("sound-toggle");
+const clickSound = document.getElementById("click-sound");
 
-  const player = {
-    x: canvas.width / 2 - 25,
-    y: canvas.height - 50,
-    width: 50,
-    height: 50,
-    speed: 10
-  };
+const foodEmojis = ['🍦','🍫','🍭','🍕','🍩','🍉','🍒','🥪'];
+const letters = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'];
+const backgroundColors = ['#fce4ec', '#ffe0b2', '#dcedc8', '#b3e5fc', '#f8bbd0'];
+let bgIndex = 0;
 
-  document.getElementById('start-button').addEventListener('click', () => {
-    timeLeft = parseInt(document.getElementById('timerInput').value, 10);
+setInterval(() => {
+  document.body.style.backgroundColor = backgroundColors[bgIndex];
+  bgIndex = (bgIndex + 1) % backgroundColors.length;
+}, 5000);
+
+function toggleSettings() {
+  document.getElementById("settings").classList.toggle("hidden");
+}
+
+function getFallSpeed() {
+  const diff = document.getElementById("difficulty").value;
+  return diff === 'easy' ? 2 : diff === 'normal' ? 4 : 6;
+}
+
+function getRandomObject() {
+  const type = document.getElementById("object-type").value;
+  if (type === "letters") {
+    return letters[Math.floor(Math.random() * letters.length)];
+  } else {
+    if (Math.random() < 0.1) return '⭐';
+    return foodEmojis[Math.floor(Math.random() * foodEmojis.length)];
+  }
+}
+
+function createCandy() {
+  if (!gameStarted || isPaused) return;
+
+  const candy = document.createElement("div");
+  candy.classList.add("candy");
+  candy.textContent = getRandomObject();
+  candy.style.left = Math.random() * (gameArea.offsetWidth - 50) + "px";
+  candy.style.top = "-60px";
+  gameArea.appendChild(candy);
+
+  let top = -60;
+  const speed = getFallSpeed();
+
+  const fall = setInterval(() => {
+    if (isPaused || !gameStarted) return;
+    top += speed;
+    candy.style.top = top + "px";
+    if (top > gameArea.offsetHeight) {
+      candy.remove();
+      clearInterval(fall);
+    }
+  }, 20);
+
+  candy.addEventListener("click", () => {
+    if (soundToggle.checked) clickSound.play();
+    score += candy.textContent === '⭐' ? 5 : 1;
+    scoreDisplay.textContent = score;
+    candy.remove();
+    clearInterval(fall);
+  });
+}
+
+function startGame() {
+  if (gameStarted) return;
+  gameStarted = true;
+  isPaused = false;
+  score = 0;
+
+  const customTime = parseInt(document.getElementById("custom-time").value) || 60;
+  timer = customTime;
+
+  scoreDisplay.textContent = score;
+  timeLeftDisplay.textContent = timer;
+  currentPlayerDisplay.textContent = currentPlayer;
+
+  clearInterval(interval);
+  clearInterval(spawnInterval);
+  gameArea.innerHTML = '';
+
+  interval = setInterval(() => {
+    if (!isPaused) {
+      timer--;
+      timeLeftDisplay.textContent = timer;
+      if (timer <= 0) endTurn();
+    }
+  }, 1000);
+
+  spawnInterval = setInterval(createCandy, 1000);
+}
+
+function pauseGame() {
+  isPaused = !isPaused;
+}
+
+function restartGame() {
+  clearInterval(interval);
+  clearInterval(spawnInterval);
+  gameStarted = false;
+  isPaused = false;
+  score = 0;
+
+  const customTime = parseInt(document.getElementById("custom-time").value) || 60;
+  timer = customTime;
+
+  currentPlayer = 1;
+  playerScores = [0, 0];
+  scoreDisplay.textContent = 0;
+  timeLeftDisplay.textContent = timer;
+  currentPlayerDisplay.textContent = 1;
+  gameArea.innerHTML = '';
+}
+
+function endTurn() {
+  clearInterval(interval);
+  clearInterval(spawnInterval);
+  gameStarted = false;
+  playerScores[currentPlayer - 1] = score;
+
+  const mode = document.getElementById("mode").value;
+  if (mode === "multi" && currentPlayer === 1) {
+    alert("Player 1's turn is over. Now Player 2!");
+    currentPlayer = 2;
     score = 0;
-    objects = [];
-    gameRunning = true;
-    document.getElementById('score').innerText = score;
-    document.getElementById('time').innerText = timeLeft;
-    clearInterval(interval);
-    clearInterval(gameLoop);
-    interval = setInterval(updateTimer, 1000);
-    gameLoop = setInterval(updateGame, 30);
-  });
-
-  function updateTimer() {
-    timeLeft--;
-    document.getElementById('time').innerText = timeLeft;
-    if (timeLeft <= 0) {
-      clearInterval(interval);
-      clearInterval(gameLoop);
-      gameRunning = false;
-      alert('Game Over! Your Score: ' + score);
+    scoreDisplay.textContent = score;
+    timeLeftDisplay.textContent = timer;
+    startGame();
+  } else {
+    if (mode === "multi") {
+      const [p1, p2] = playerScores;
+      const winner = p1 > p2 ? "Player 1 Wins!" : (p1 < p2 ? "Player 2 Wins!" : "It's a tie!");
+      alert(`Game Over!\nPlayer 1: ${p1}\nPlayer 2: ${p2}\n${winner}`);
+    } else {
+      alert(`Game Over! Your score: ${score}`);
     }
   }
-
-  function updateGame() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawPlayer();
-    moveObjects();
-    drawObjects();
-    detectCollisions();
-  }
-
-  function drawPlayer() {
-    ctx.fillStyle = 'blue';
-    ctx.fillRect(player.x, player.y, player.width, player.height);
-  }
-
-  function spawnObject() {
-    const size = 30;
-    objects.push({
-      x: Math.random() * (canvas.width - size),
-      y: -size,
-      size: size,
-      speed: 3 + Math.random() * 3
-    });
-  }
-
-  function moveObjects() {
-    if (Math.random() < 0.05) {
-      spawnObject();
-    }
-    for (let obj of objects) {
-      obj.y += obj.speed;
-    }
-    objects = objects.filter(obj => obj.y < canvas.height);
-  }
-
-  function drawObjects() {
-    ctx.fillStyle = 'pink';
-    for (let obj of objects) {
-      ctx.beginPath();
-      ctx.arc(obj.x + obj.size / 2, obj.y + obj.size / 2, obj.size / 2, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  function detectCollisions() {
-    for (let i = 0; i < objects.length; i++) {
-      const obj = objects[i];
-      if (
-        obj.x < player.x + player.width &&
-        obj.x + obj.size > player.x &&
-        obj.y < player.y + player.height &&
-        obj.y + obj.size > player.y
-      ) {
-        score += 10;
-        document.getElementById('score').innerText = score;
-        objects.splice(i, 1);
-        break;
-      }
-    }
-  }
-
-  document.addEventListener('keydown', (e) => {
-    if (!gameRunning) return;
-    if (e.key === 'ArrowLeft' && player.x > 0) {
-      player.x -= player.speed;
-    } else if (e.key === 'ArrowRight' && player.x < canvas.width - player.width) {
-      player.x += player.speed;
-    }
-  });
-};
+}
